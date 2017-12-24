@@ -1,0 +1,4 @@
+*.xml
+*.original
+*.gnucash
+__pycache__/
