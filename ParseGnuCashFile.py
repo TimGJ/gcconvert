@@ -24,9 +24,22 @@ class Event:
         self.date = self.split.parent.dateposted
         self.description = self.split.parent.description
         self.value = self.split.value
+        self.balance = 0.0
+
+    def SetBalance(self, amount):
+        """
+        Sets the account balance following a particular event
+        :param amount:
+        :return:
+        """
 
     def __repr__(self):
-        return '{:%d/%m/%Y}: {:60} {:>12,.2f}'.format(self.date, self.description, self.value)
+        if self.value < 0.0:
+            return '| {:%d/%m/%Y}: | {:60} | {:>12,.2f}             | {:>12,.2f} |'.format(self.date, self.description,
+                                                                                           self.value, self.balance)
+        else:
+            return '| {:%d/%m/%Y}: | {:60} |             {:>12,.2f} | {:>12,.2f} |'.format(self.date, self.description,
+                                                                                           self.value, self.balance)
 
     def __lt__(self, other):
         return self.date < self.other
@@ -231,6 +244,17 @@ class Book:
         for transaction in sorted(self.transactions):
             for _, split in transaction.splits.items():
                 self.accounts[split.account].AddEvent(split)
+
+        # Now for each account calculate a running balance
+
+        for key, category in self.categories.items():
+            logging.debug('Calculating running balances for category {}'.format(key))
+            for child in category.children:
+                logging.debug('- {}'.format(child.name))
+                balance = 0.0
+                for event in child.events:
+                    balance += event.value
+                    event.balance = balance
 
     def __repr__(self):
         return "{} accounts. {} transactions.".format(len(self.accounts), len(self.transactions))
