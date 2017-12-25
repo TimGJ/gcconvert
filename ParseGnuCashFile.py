@@ -11,6 +11,26 @@ import collections
 import re
 import datetime
 
+class Event:
+    """
+    An event is a combination of a transaction (date, commentary) and a split (account, amount).
+
+    Each account has a chronological list of Events starting with its opening balance
+    """
+
+    def __init__(self, split, balance = None):
+        self.split = split
+        self.transaction = split.parent
+        self.date = self.split.parent.dateposted
+        self.description = self.split.parent.description
+        self.value = self.split.value
+
+    def __repr__(self):
+        return '{:%d/%m/%Y}: {:40} {:.2f}'.format(self.date, self.description, self.value)
+
+    def __lt__(self, other):
+        return self.date < self.other
+
 class Account:
     """
 
@@ -33,8 +53,8 @@ class Account:
         self.slots = None
         self.description = None
         self.level = None
-        self.opening = 0.0
         self.children = []
+        self.events = []
 
         for child in self.xml:
             m = Account.re.match(child.tag)
@@ -62,8 +82,16 @@ class Account:
         """
         return self.level
 
+    def AddEvent(self, split):
+        """
+        Adds an event from the splits of a transaction
+        :param split:
+        :return: None
+        """
+        self.events.append(Event(split))
+
     def __repr__(self):
-        attributes = ['name', 'id', 'description', 'type', 'level', 'parent']
+        attributes = ['name', 'id', 'description', 'type', 'level', 'opening', 'parent']
         atrlist = ["{}: {}".format(a, getattr(self, a, None)) for a in attributes]
         return "; ".join(atrlist)
 
@@ -108,7 +136,7 @@ class Transaction:
                 elif n == 'date-posted':
                     self.dateposted = self.ParseDateString(child.find('{http://www.gnucash.org/XML/ts}date').text)
                 elif n == 'date-entered':
-                    self.dateposted = self.ParseDateString(child.find('{http://www.gnucash.org/XML/ts}date').text)
+                    self.dateentered = self.ParseDateString(child.find('{http://www.gnucash.org/XML/ts}date').text)
                 elif n == 'splits':
                     for split in child:
                         self.AddSplit(split)
@@ -194,29 +222,14 @@ class Book:
         else:
             logging.error('No root account found!')
 
-        # Now find the opening balances
+        # Now setup the list of Events for each account...
 
-        self.SetOpeningBalances()
+        for transaction in sorted(self.transactions):
+            for _, split in transaction.splits.items():
+                self.accounts[split.account].AddEvent(split)
 
     def __repr__(self):
         return "{} accounts. {} transactions.".format(len(self.accounts), len(self.transactions))
-
-    def SetOpeningBalances(self):
-        """
-        Sets up the opening balance on those accounts where it is appropriate (i.e. opening
-        balance was not 0.0
-        :return:
-        """
-        for account in self.accounts:
-            if self.accounts[account].type == 'EQUITY' and self.accounts[account].name == 'Opening Balances':
-                balances = self.accounts[self.accounts[account].id]
-                logging.info('Opening balances account id {}'.format(balances.id))
-                for transaction in self.transactions:
-                    for split in transaction.splits:
-                        logging.debug('Found split {}'.format(split))
-                break
-        else:
-            logging.warning('Can\'t find opening balances!')
 
     def SetLevels(self, account, level=0):
         """
