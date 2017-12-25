@@ -26,7 +26,7 @@ class Event:
         self.value = self.split.value
 
     def __repr__(self):
-        return '{:%d/%m/%Y}: {:40} {:.2f}'.format(self.date, self.description, self.value)
+        return '{:%d/%m/%Y}: {:60} {:>12,.2f}'.format(self.date, self.description, self.value)
 
     def __lt__(self, other):
         return self.date < self.other
