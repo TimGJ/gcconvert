@@ -69,11 +69,13 @@ class Account:
 
 class Split:
     """
-    A transaction contains a series of splits, allocating its value between various accounts
+    A transaction contains a series of splits, allocating its value between various accounts. The parent
+    value is the transaction with which a split is associated so we can look up things like description, date etc.
     """
 
-    def __init__(self, split):
+    def __init__(self, split, parent):
         self.xml = split
+        self.parent = parent
         self.id = self.xml.find('{http://www.gnucash.org/XML/split}id').text
         self.account = self.xml.find('{http://www.gnucash.org/XML/split}account').text
         self.amttext = self.xml.find('{http://www.gnucash.org/XML/split}value').text
@@ -129,7 +131,7 @@ class Transaction:
         :param split:
         :return: None
         """
-        tmp = Split(split)
+        tmp = Split(split, self)
         self.splits[tmp.id] = tmp
 
     def ParseDateString(self, d):
@@ -143,9 +145,12 @@ class Transaction:
             return datetime.datetime.strptime(m.groups()[0], '%Y-%m-%d').date()
 
     def __repr__(self):
-        attributes = ['id', 'description', 'dateposted', 'dateentered', 'num']
+        attributes = ['id', 'description', 'dateposted', 'num']
         atrlist = ["{}: {}".format(a, getattr(self, a, None)) for a in attributes]
         return "; ".join(atrlist)
+
+    def __lt__(self, other):
+        return self.dateposted < other.dateposted
 
 class Book:
     """
@@ -168,11 +173,11 @@ class Book:
                 pass
             else:
                 logging.warning('Book: Unknown tag {}'.format(child.tag))
-        """
-        Create the parent/child relationship between the various accounts. All accounts are
-        children, grandchildren etc. of the root account. (The root account is the only one with
-        no parent.)
-        """
+
+        # Create the parent/child relationship between the various accounts. All accounts are
+        # children, grandchildren etc. of the root account. (The root account is the only one with
+        # no parent.)
+
         for account in self.accounts:
             if self.accounts[account].parentid:
                 child = self.accounts[account]
@@ -181,15 +186,37 @@ class Book:
                 parent.children.append(child)
             else:
                 self.root = self.accounts[account]
+
         # Having created the tree, now update each account with its level in the hierarchy
+
         if self.root:
             self.SetLevels(self.root)
         else:
             logging.error('No root account found!')
 
+        # Now find the opening balances
+
+        self.SetOpeningBalances()
+
     def __repr__(self):
         return "{} accounts. {} transactions.".format(len(self.accounts), len(self.transactions))
 
+    def SetOpeningBalances(self):
+        """
+        Sets up the opening balance on those accounts where it is appropriate (i.e. opening
+        balance was not 0.0
+        :return:
+        """
+        for account in self.accounts:
+            if self.accounts[account].type == 'EQUITY' and self.accounts[account].name == 'Opening Balances':
+                balances = self.accounts[self.accounts[account].id]
+                logging.info('Opening balances account id {}'.format(balances.id))
+                for transaction in self.transactions:
+                    for split in transaction.splits:
+                        logging.debug('Found split {}'.format(split))
+                break
+        else:
+            logging.warning('Can\'t find opening balances!')
 
     def SetLevels(self, account, level=0):
         """
