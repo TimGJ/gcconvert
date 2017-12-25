@@ -39,7 +39,7 @@ class Account:
 
     def __init__(self, account):
         """
-        Note that parent and parentid are two separate things. parentid is the
+        Note that parent and parentid are two separate things. parentid is theaaqasss
         internal Gnucash GUID. parent is a reference the parent object
 
         :param Gnu cash XML account object:
@@ -214,6 +214,10 @@ class Book:
                 parent.children.append(child)
             else:
                 self.root = self.accounts[account]
+
+        # Categories - e.g. INCOME or EXPENSE are one level below root.
+
+        self.categories = {a.type: a for a in self.root.children}
 
         # Having created the tree, now update each account with its level in the hierarchy
 
