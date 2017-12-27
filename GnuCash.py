@@ -23,6 +23,7 @@ class Event:
         self.date = self.split.parent.dateposted
         self.description = self.split.parent.description
         self.value = self.split.value
+        self.accountid = self.split.account
         self.balance = 0.0
 
     def SetBalance(self, amount):
@@ -39,14 +40,12 @@ class Event:
 
     def __repr__(self):
         if self.value < 0.0:
-            return '| {:%d/%m/%Y}: | {:60} | {:>12,.2f}             | {:>12,.2f} |'.format(self.date, self.description,
-                                                                                           self.value, self.balance)
+            return '{:%d/%m/%Y}: {:60} {:>12,.2f}            '.format(self.date, self.description, self.value)
         else:
-            return '| {:%d/%m/%Y}: | {:60} |             {:>12,.2f} | {:>12,.2f} |'.format(self.date, self.description,
-                                                                                           self.value, self.balance)
+            return '{:%d/%m/%Y}: {:60}             {:>12,.2f}'.format(self.date, self.description, self.value)
 
     def __lt__(self, other):
-        return self.date < self.other
+        return self.date < other.date
 
 class Account:
     """
@@ -114,8 +113,21 @@ class Account:
         """
         self.parent = parent
 
+    def GetAllEvents(self):
+        """
+        Gets a list of the events on the account (essentially the self.events attribute)
+        recursing through child accounts.
+        :return: list of events
+        """
+        events = []
+        for child in self.children:
+            events += child.GetAllEvents()
+        events += self.events
+        return sorted(events)
+
+
     def __repr__(self):
-        attributes = ['name', 'id', 'description', 'type', 'level', 'opening', 'parent']
+        attributes = ['name', 'id', 'description', 'type', 'level']
         atrlist = ["{}: {}".format(a, getattr(self, a, None)) for a in attributes]
         return "; ".join(atrlist)
 
@@ -194,7 +206,7 @@ class Transaction:
         """
         m = Transaction.datere.match(d)
         if m:
-            return datetime.datetime.strptime(m.groups()[0], '%Y-%m-%d').date()
+            return datetime.datetime.strptime(m.groups()[0], '%Y-%m-%d')
 
     def __repr__(self):
         attributes = ['id', 'description', 'dateposted', 'num']
