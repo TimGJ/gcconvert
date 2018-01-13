@@ -17,9 +17,16 @@ class Event:
     Each account has a chronological list of Events starting with its opening balance
     """
 
-    def __init__(self, split, balance = None):
+    def __init__(self, split, balance=None):
         self.split = split
         self.transaction = split.parent
+        for _, a in self.transaction.splits.items():
+            if a.account != self.split.account:
+                self.matching = a.account
+                break
+        else:
+            logging.warning("Can't find matching transaction for {}".format(self.split))
+            self.matching = None
         self.date = self.split.parent.dateposted
         self.description = self.split.parent.description
         self.value = self.split.value
@@ -131,6 +138,12 @@ class Account:
         atrlist = ["{}: {}".format(a, getattr(self, a, None)) for a in attributes]
         return "; ".join(atrlist)
 
+    def __lt__(self, other):
+        if self.type == other.type:
+            return self.name < other.name
+        else:
+            return self.type < other.type
+
 class Split:
     """
     A transaction contains a series of splits, allocating its value between various accounts. The parent
@@ -206,7 +219,7 @@ class Transaction:
         """
         m = Transaction.datere.match(d)
         if m:
-            return datetime.datetime.strptime(m.groups()[0], '%Y-%m-%d')
+            return datetime.datetime.strptime(m.groups()[0], '%Y-%m-%d').date()
 
     def __repr__(self):
         attributes = ['id', 'description', 'dateposted', 'num']
@@ -228,39 +241,35 @@ class Book:
         self.transactions = []
         self.name = name
         self.writexml = kwargs.get('xml', False)
-        try:
-            self.contents = self.OpenGnuCashFile()
-        except (FileNotFoundError, OSError) as e:
-            logging.critical('Error opening {}: {}'.format(self.name, e))
+        self.contents = self.OpenGnuCashFile()
+        root = ET.fromstring(self.contents)
+        if root.tag != 'gnc-v2':
+            logging.error('Got unexpected XML root tag {}. Is {} a GnuCash file?'.format(root.tag, ap.name))
         else:
-            root = ET.fromstring(self.contents)
-            if root.tag != 'gnc-v2':
-                logging.error('Got unexpected XML root tag {}. Is {} a GnuCash file?'.format(root.tag, ap.name))
-            else:
-                book = root.find('{http://www.gnucash.org/XML/gnc}book')
-                if book:
-                    for child in book.getchildren():
-                        if child.tag == '{http://www.gnucash.org/XML/gnc}account':
-                            acc = Account(child)
-                            self.accounts[acc.id] = acc
-                        elif child.tag == '{http://www.gnucash.org/XML/gnc}transaction':
-                            self.transactions.append(Transaction(child))
-                        elif child.tag == '{http://www.gnucash.org/XML/book}id':
-                            pass
-                        else:
-                            logging.warning('Book: Unknown tag {}'.format(child.tag))
-
-                    self.SetParents()
-                    self.categories = {a.type: a for a in self.root.children}
-
-                    if self.root:
-                        self.SetLevels(self.root)
+            book = root.find('{http://www.gnucash.org/XML/gnc}book')
+            if book:
+                for child in book.getchildren():
+                    if child.tag == '{http://www.gnucash.org/XML/gnc}account':
+                        acc = Account(child)
+                        self.accounts[acc.id] = acc
+                    elif child.tag == '{http://www.gnucash.org/XML/gnc}transaction':
+                        self.transactions.append(Transaction(child))
+                    elif child.tag == '{http://www.gnucash.org/XML/book}id':
+                        pass
                     else:
-                        logging.error('No root account found!')
+                        logging.warning('Book: Unknown tag {}'.format(child.tag))
 
-                    self.SetEvents()
+                self.SetParents()
+                self.categories = {a.type: a for a in self.root.children}
+
+                if self.root:
+                    self.SetLevels(self.root)
                 else:
-                    logging.error("Can't find GnuCash book")
+                    logging.error('No root account found!')
+
+                self.SetEvents()
+            else:
+                logging.error("Can't find GnuCash book")
 
     def __repr__(self):
         return "{} accounts. {} transactions.".format(len(self.accounts), len(self.transactions))
@@ -321,7 +330,6 @@ class Book:
         for key, category in self.categories.items():
             logging.debug('Calculating running balances for category {}'.format(key))
             for child in category.children:
-                logging.debug('- {}'.format(child.name))
                 balance = 0.0
                 for event in child.events:
                     balance += event.value
