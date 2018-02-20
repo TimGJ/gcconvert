@@ -1,4 +1,7 @@
 *.xml
 *.original
 *.gnucash
+venv/
+.idea/
+*.xlsx
 __pycache__/
