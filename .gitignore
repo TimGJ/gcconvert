@@ -1,6 +1,7 @@
 *.xml
 *.original
 *.gnucash
+*.log
 venv/
 .idea/
 *.xlsx
