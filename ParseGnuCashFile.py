@@ -100,18 +100,25 @@ if __name__ == '__main__':
         logging.critical('Error opening file: {}'.format(e))
     else:
         eventlist = accounts.root.GetAllEvents()
-        events = pd.DataFrame([{'date': event.date,
-                   'type': accounts.accounts[event.accountid].type,
-                   'account': accounts.accounts[event.accountid].name,
-                   'matching': accounts.accounts[event.matching].name,
-                   'description':event.description,
-                   'balance': event.balance,
-                   'value': event.value} for event in eventlist])
-        if not ap.start:
-            ap.start = events.date.min()
-        if not ap.end:
-            ap.end = events.date.max()
-        events = events[(events['date'] >= ap.start) & (events['date'] <= ap.end)]
+        for event in eventlist:
+            if not event.value:
+                logging.error("Found suspicious event (zero or missing value) {} on {}".format(event.description, event.date))
+        try:
+            events = pd.DataFrame([{'date': event.date,
+                       'type': accounts.accounts[event.accountid].type,
+                       'account': accounts.accounts[event.accountid].name,
+                       'matching': accounts.accounts[event.matching].name,
+                       'description':event.description,
+                       'balance': event.balance,
+                       'value': event.value} for event in eventlist])
+        except KeyError as e:
+            logging.critical('Error loading transaction. Probably a blank transaction.')
+        else:
+            if not ap.start:
+                ap.start = events.date.min()
+            if not ap.end:
+                ap.end = events.date.max()
+            events = events[(events['date'] >= ap.start) & (events['date'] <= ap.end)]
 
-        if ap.report and ap.report == 'transactions':
-            GenerateTransactionsReport(events, ap)
+            if ap.report and ap.report == 'transactions':
+                GenerateTransactionsReport(events, ap)
