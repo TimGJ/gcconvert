@@ -62,7 +62,7 @@ class Account:
 
     def __init__(self, account):
         """
-        Note that parent and parentid are two separate things. parentid is theaaqasss
+        Note that parent and parentid are two separate things. parentid is the
         internal Gnucash GUID. parent is a reference the parent object
 
         :param Gnu cash XML account object:

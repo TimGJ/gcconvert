@@ -3,15 +3,46 @@ Open and parse a GnuCash file
 """
 
 import GnuCash
-import gzip
 import argparse
 import logging
-import xml.etree.ElementTree as ET
-import collections
-import re
 import datetime
 import pandas as pd
 import xlsxwriter
+import collections
+import csv
+
+
+def GenerateSummaryReport(book, ap, categories=["INCOME", "EXPENSE"], minlevel=2, maxlevel=2):
+    """
+    Generates the monthly summaries for a particular period (e.g. a year) of income and
+    expenditure
+    :param accounts: The Account array as read by GnuCash
+    :param categories: INCOME and EXPENSE
+    :param minlevel: How far up the tree to go - i.e. where do we start reporting account
+    :param maxlevel: How far down the tree to go - i.e. where do we rollup subaccounts to
+    :return: None
+    """
+    # Get the level 1 Accounts corresponding to `categories`
+
+    monthnames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    colnames = ["Category"]+monthnames
+    logging.debug("Writing annual accounts to {}".format(ap.csv))
+    with open(ap.csv, "w", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, colnames)
+        print("Manchester Spiritualist Centre Accounts {}".format(ap.year), file=csvfile)
+        writer.writeheader()
+        accountkeys = {k: v.id for k,v in book.categories.items() if k in categories}
+        for category, acid in accountkeys.items():
+            print("{category}".format(category=category), file=csvfile)
+            for child in book.accounts[acid].children:
+                events = [t for t in child.GetAllEvents() if t.date.year == ap.year]
+                months = collections.defaultdict(float)
+                for event in events:
+                    months[monthnames[event.date.month-1]] += abs(event.value)
+                if len(months) == 0:
+                    continue
+                months["Category"] = child.name
+                writer.writerow(months)
 
 
 def GenerateTransactionsReport(events, ap, accounts=['Cash', 'HSBC Current Account']):
@@ -62,14 +93,15 @@ def GetArgs():
     :return: argparse namespace
     """
     GetDate = lambda d: datetime.datetime.strptime(d, '%Y-%m-%d').date()
-    reportchoices = ['transactions']
+    reportchoices = ['transactions', 'annual']
     p = argparse.ArgumentParser(description='Read GnuCash files')
     p.add_argument('--logging', metavar='level', help='Logging level', choices=logchoices, default='info')
     p.add_argument('--report', metavar='type', help='Type of report to generate', choices=reportchoices)
     p.add_argument('--start', metavar='date', help='Start of reporting period', type=GetDate)
     p.add_argument('--end', metavar='date', help='End of reporting period', type=GetDate)
-    p.add_argument('--xml', help='Write XML file', action='store_true')
+    p.add_argument('--year', metavar='year', help='Annual report year', type=int, default=datetime.date.today().year-1)
     p.add_argument('--excel', help='Write Excel (.xlsx) file', metavar = 'filename')
+    p.add_argument('--csv', help='Write CSV file', metavar = 'filename', default='accounts.csv')
     p.add_argument('name', metavar='GnuCash file', help='Name of GnuCash file')
 
     ap = p.parse_args()
@@ -77,6 +109,13 @@ def GetArgs():
         p.error('Start date must be before end')
 
     now = datetime.date.today()
+
+    if ap.csv and ap.report != "annual":
+        p.error("CSV option only works for annual reports")
+
+    if ap.start or ap.end and ap.report == 'annual':
+        p.error('Annual report requires a year parameter not start or end')
+
     if ap.start and ap.start > now:
         p.error('Start date {:%Y-%m-%d} is in the future'.format(ap.start))
 
@@ -110,9 +149,9 @@ if __name__ == '__main__':
                        'matching': accounts.accounts[event.matching].name,
                        'description':event.description,
                        'balance': event.balance,
-                       'value': event.value} for event in eventlist])
+                       'value': event.value} for event in eventlist if event.value])
         except KeyError as e:
-            logging.critical('Error loading transaction. Probably a blank transaction.')
+            logging.critical('Error loading transaction: {}'.format(e))
         else:
             if not ap.start:
                 ap.start = events.date.min()
@@ -120,5 +159,14 @@ if __name__ == '__main__':
                 ap.end = events.date.max()
             events = events[(events['date'] >= ap.start) & (events['date'] <= ap.end)]
 
-            if ap.report and ap.report == 'transactions':
-                GenerateTransactionsReport(events, ap)
+            if ap.report:
+                if ap.report == 'transactions':
+                    GenerateTransactionsReport(events, ap)
+                elif ap.report == 'annual':
+                    GenerateSummaryReport(accounts, ap)
+                else:
+                    logging.critical("Unknown report type {} specified".format(ap.report))
+            else:
+                logging.critical("No report type specified")
+
+
