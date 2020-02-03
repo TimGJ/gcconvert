@@ -101,7 +101,7 @@ def GetArgs():
     p.add_argument('--end', metavar='date', help='End of reporting period', type=GetDate)
     p.add_argument('--year', metavar='year', help='Annual report year', type=int, default=datetime.date.today().year-1)
     p.add_argument('--excel', help='Write Excel (.xlsx) file', metavar = 'filename')
-    p.add_argument('--csv', help='Write CSV file', metavar = 'filename', default='accounts.csv')
+    p.add_argument('--csv', help='Write CSV file', metavar = 'filename')
     p.add_argument('name', metavar='GnuCash file', help='Name of GnuCash file')
 
     ap = p.parse_args()
@@ -113,7 +113,7 @@ def GetArgs():
     if ap.csv and ap.report != "annual":
         p.error("CSV option only works for annual reports")
 
-    if ap.start or ap.end and ap.report == 'annual':
+    if (ap.start or ap.end) and ap.report == 'annual':
         p.error('Annual report requires a year parameter not start or end')
 
     if ap.start and ap.start > now:
